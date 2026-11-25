@@ -1,0 +1,14 @@
+sync_max_start_skew_ms: 50
+topics:
+  /imu/data:
+    hz: 100
+    hz_tolerance: 0.15
+    max_gap_ms: 30
+  /lidar/scan:
+    hz: 10
+    hz_tolerance: 0.15
+    max_gap_ms: 250
+  /gnss/fix:
+    hz: 5
+    hz_tolerance: 0.2
+    max_gap_ms: 500
