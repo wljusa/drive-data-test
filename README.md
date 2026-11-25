@@ -73,7 +73,3 @@ topics:
 | `--rewind-imu` | IMU 某一帧的 header.stamp 早于上一帧 | `monotonic` |
 | `--no-gnss` | 不写 `/gnss/fix` | `missing` |
 | `--gnss-delay 0.2` | GNSS 首帧晚 200ms | `skew` |
-
-## 面试时怎么讲
-
-这是数据进场景回放之前的门禁。频率和丢帧看传感器有没有断流，时间戳回退看 header 能不能拿来对齐，首帧偏差看多传感器能不能放在同一条时间线上。检查器对正常包和坏包都有测试，避免规则写错后全部 PASS。
