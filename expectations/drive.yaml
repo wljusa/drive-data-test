@@ -1,0 +1,23 @@
+sync_max_start_skew_ms: 50
+min_lead_range_m: 15
+speed_min_mps: 0
+speed_max_mps: 33.3
+require_gnss_fix: true
+forward_beams: [3, 4]
+topics:
+  /imu/data:
+    hz: 100
+    hz_tolerance: 0.15
+    max_gap_ms: 30
+  /lidar/scan:
+    hz: 10
+    hz_tolerance: 0.15
+    max_gap_ms: 250
+  /gnss/fix:
+    hz: 5
+    hz_tolerance: 0.2
+    max_gap_ms: 500
+  /vehicle/twist:
+    hz: 20
+    hz_tolerance: 0.2
+    max_gap_ms: 100

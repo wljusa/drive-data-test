@@ -1,0 +1,10 @@
+name: GNSS失锁
+duration_s: 3
+ego_speed_mps: 16
+lead_range_m: 40
+fault:
+  gnss_lose_after_s: 1.0
+expect:
+  accept: false
+  codes:
+    - [gnss, /gnss/fix]

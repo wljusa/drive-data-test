@@ -1,0 +1,8 @@
+name: 前车过近
+duration_s: 3
+ego_speed_mps: 16
+lead_range_m: 6
+expect:
+  accept: false
+  codes:
+    - [gap_range, /lidar/scan]

@@ -1,26 +1,27 @@
-# bag-test
+# drive-data-test
 
-检查 rosbag2 里 IMU、激光扫描和 GNSS 的 header 时间戳：话题在不在、频率对不对、帧间隔有没有超限、时间有没有回退、几个话题的首帧齐不齐。样本包由脚本生成，不依赖实车数据。
+自动驾驶路采数据检查。用 YAML 描述一段行车片段，生成 rosbag2，再检查两件事：传感器话题能不能用，片段是否满足车速、前向距离和 GNSS 定位这些入库规则。样本由脚本生成，不依赖实车。
 
-Checks rosbag2 header stamps for IMU, LaserScan, and NavSatFix: presence, rate, drop gaps, backwards stamps, and start-time skew.
+Replay checks for autonomous-driving logs. YAML describes a short drive clip. pytest checks sensor-topic health and whether speed, forward range, and GNSS fix meet the entry rules.
 
-## 能做什么
+## 测什么
 
-- 按 YAML 给每个话题设置期望频率、容差和最大帧间隔
-- 丢帧：相邻 header.stamp 的间隔超过阈值
-- 回退：按 bag 接收顺序读，header.stamp 变小
-- 缺失：期望话题没有消息
-- 对齐：各话题第一条 header.stamp 的差值超过阈值
-- 正常包必须通过；上面几类坏包必须失败
+- 片段：高速巡航、前车过近、超速、GNSS 失锁、激光丢帧、IMU 时间戳回退
+- 话题：`/imu/data`、`/lidar/scan`、`/gnss/fix`、`/vehicle/twist` 的频率、帧间隔、时间戳是否回退、话题是否缺失、首帧是否对齐
+- 入库规则：前向最近距离不低于阈值，车速落在允许区间，GNSS 保持定位
+- 正常片段必须通过；违反规则或传感器损坏的片段必须被拒绝
+
+前向距离取激光中间两束。车速来自 `/vehicle/twist`。
 
 ## 架构
 
 ```mermaid
 flowchart LR
-  sample[样本bag] --> reader[读取header.stamp]
-  expect[YAML期望] --> rules[规则]
-  reader --> rules
-  rules --> report[PASS或失败项]
+  yamlCase[YAML片段] --> bag[rosbag2]
+  bag --> health[话题门禁]
+  bag --> rules[车速 前向距离 GNSS]
+  health --> decision[入库或拒绝]
+  rules --> decision
 ```
 
 ## 5 分钟跑通
@@ -30,9 +31,10 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 pytest
+python -m bagcheck.suite
 ```
 
-看一条正常包和一条丢帧包：
+只跑话题门禁：
 
 ```bash
 python -m bagcheck.sample /tmp/sensors-good
@@ -42,34 +44,37 @@ python -m bagcheck.sample /tmp/sensors-drop --drop-scan
 python -m bagcheck /tmp/sensors-drop --expect expectations/sensors.yaml
 ```
 
-丢帧包会打印 `gap` 和 `FAIL`，进程退出码为 1。
-
-## 期望格式
+## 片段格式
 
 ```yaml
-sync_max_start_skew_ms: 50
-topics:
-  /imu/data:
-    hz: 100
-    hz_tolerance: 0.15
-    max_gap_ms: 30
-  /lidar/scan:
-    hz: 10
-    hz_tolerance: 0.15
-    max_gap_ms: 250
-  /gnss/fix:
-    hz: 5
-    hz_tolerance: 0.2
-    max_gap_ms: 500
+name: 高速巡航
+duration_s: 3
+ego_speed_mps: 16
+lead_range_m: 40
+expect:
+  accept: true
 ```
 
-检查器用的是消息 `header.stamp`，不是本机收到包的墙钟。接收顺序仍单调、传感器时间回退时，会记为 `monotonic`。这和驱动把错误时间戳写进消息、bag 本身仍按写入顺序排列的情况一致。
+拒绝一个片段时写明失败项：
 
-## 样本里的三类坏数据
+```yaml
+name: 前车过近
+lead_range_m: 6
+expect:
+  accept: false
+  codes:
+    - [gap_range, /lidar/scan]
+```
 
-| 参数 | 注入的问题 | 期望失败项 |
-| --- | --- | --- |
-| `--drop-scan` | 激光在 0.5s 到 0.9s 没有帧 | `gap` |
-| `--rewind-imu` | IMU 某一帧的 header.stamp 早于上一帧 | `monotonic` |
-| `--no-gnss` | 不写 `/gnss/fix` | `missing` |
-| `--gnss-delay 0.2` | GNSS 首帧晚 200ms | `skew` |
+阈值在 `expectations/drive.yaml`：前向距离 15 m，车速 0–33.3 m/s，GNSS 需要保持定位。
+
+## 和路采回归的对应关系
+
+| 本仓库 | 接到实车数据之后 |
+| --- | --- |
+| YAML 片段 | 场景库里的一段录包 |
+| 话题门禁 | 数据进回放前的质检 |
+| 前向距离、车速、GNSS | 片段能否入库的规则 |
+| `accept: false` | 坏数据不能进入回归 |
+
+检查器用消息 `header.stamp`。接收顺序仍单调、传感器时间回退时，记为 `monotonic`。

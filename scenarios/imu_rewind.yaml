@@ -1,0 +1,10 @@
+name: IMU时间戳回退
+duration_s: 3
+ego_speed_mps: 16
+lead_range_m: 40
+fault:
+  rewind_imu: true
+expect:
+  accept: false
+  codes:
+    - [monotonic, /imu/data]

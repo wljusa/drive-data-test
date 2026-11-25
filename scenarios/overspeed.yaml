@@ -1,0 +1,8 @@
+name: 超速
+duration_s: 3
+ego_speed_mps: 40
+lead_range_m: 40
+expect:
+  accept: false
+  codes:
+    - [speed, /vehicle/twist]

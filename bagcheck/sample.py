@@ -15,10 +15,12 @@ Vector3 = TYPESTORE.types["geometry_msgs/msg/Vector3"]
 LaserScan = TYPESTORE.types["sensor_msgs/msg/LaserScan"]
 NavSatFix = TYPESTORE.types["sensor_msgs/msg/NavSatFix"]
 NavSatStatus = TYPESTORE.types["sensor_msgs/msg/NavSatStatus"]
+Twist = TYPESTORE.types["geometry_msgs/msg/Twist"]
+TwistStamped = TYPESTORE.types["geometry_msgs/msg/TwistStamped"]
 
 ZERO9 = np.zeros(9, dtype=np.float64)
-RANGES = np.full(8, 5.0, dtype=np.float32)
 INTENSITIES = np.zeros(8, dtype=np.float32)
+FORWARD_BEAMS = (3, 4)
 
 
 def _ns(seconds: float) -> int:
@@ -42,7 +44,14 @@ def _imu(stamp_ns: int):
     )
 
 
-def _scan(stamp_ns: int):
+def _ranges(lead_range_m: float) -> np.ndarray:
+    ranges = np.full(8, 25.0, dtype=np.float32)
+    for index in FORWARD_BEAMS:
+        ranges[index] = lead_range_m
+    return ranges
+
+
+def _scan(stamp_ns: int, lead_range_m: float):
     return LaserScan(
         header=_header(stamp_ns, "lidar"),
         angle_min=-0.8,
@@ -52,15 +61,26 @@ def _scan(stamp_ns: int):
         scan_time=0.1,
         range_min=0.1,
         range_max=30.0,
-        ranges=RANGES,
+        ranges=_ranges(lead_range_m),
         intensities=INTENSITIES,
     )
 
 
-def _fix(stamp_ns: int):
+def _twist(stamp_ns: int, speed_mps: float):
+    return TwistStamped(
+        header=_header(stamp_ns, "base_link"),
+        twist=Twist(
+            linear=Vector3(x=float(speed_mps), y=0.0, z=0.0),
+            angular=Vector3(x=0.0, y=0.0, z=0.0),
+        ),
+    )
+
+
+def _fix(stamp_ns: int, fix: bool = True):
+    status = NavSatStatus.STATUS_FIX if fix else NavSatStatus.STATUS_NO_FIX
     return NavSatFix(
         header=_header(stamp_ns, "gnss"),
-        status=NavSatStatus(status=NavSatStatus.STATUS_FIX, service=NavSatStatus.SERVICE_GPS),
+        status=NavSatStatus(status=status, service=NavSatStatus.SERVICE_GPS),
         latitude=22.54,
         longitude=113.95,
         altitude=20.0,
@@ -87,6 +107,10 @@ def write_bag(
     rewind_imu: bool = False,
     include_gnss: bool = True,
     gnss_delay_s: float = 0.0,
+    ego_speed_mps: float = 0.0,
+    lead_range_m: float = 25.0,
+    gnss_lose_after_s: float | None = None,
+    include_twist: bool = False,
 ) -> None:
     if path.exists():
         shutil.rmtree(path)
@@ -94,6 +118,7 @@ def write_bag(
     imu_times = _times(100, duration_s)
     scan_times = _times(10, duration_s)
     gnss_times = _times(5, duration_s, gnss_delay_s) if include_gnss else []
+    twist_times = _times(20, duration_s) if include_twist else []
     if drop_scan:
         scan_times = [stamp for stamp in scan_times if not _ns(0.50) <= stamp < _ns(0.90)]
     if rewind_imu and len(imu_times) > 50:
@@ -105,10 +130,14 @@ def write_bag(
         messages.append((bag_time, "/imu/data", "sensor_msgs/msg/Imu", _imu(stamp)))
     for index, stamp in enumerate(scan_times):
         bag_time = _ns(index / 10)
-        messages.append((bag_time, "/lidar/scan", "sensor_msgs/msg/LaserScan", _scan(stamp)))
+        messages.append((bag_time, "/lidar/scan", "sensor_msgs/msg/LaserScan", _scan(stamp, lead_range_m)))
     for index, stamp in enumerate(gnss_times):
         bag_time = _ns(gnss_delay_s + index / 5)
-        messages.append((bag_time, "/gnss/fix", "sensor_msgs/msg/NavSatFix", _fix(stamp)))
+        fixed = gnss_lose_after_s is None or stamp < _ns(gnss_lose_after_s)
+        messages.append((bag_time, "/gnss/fix", "sensor_msgs/msg/NavSatFix", _fix(stamp, fixed)))
+    for index, stamp in enumerate(twist_times):
+        bag_time = _ns(index / 20)
+        messages.append((bag_time, "/vehicle/twist", "geometry_msgs/msg/TwistStamped", _twist(stamp, ego_speed_mps)))
     messages.sort(key=lambda item: item[0])
 
     with Writer(path, version=9) as writer:

@@ -1,0 +1,10 @@
+name: 激光丢帧
+duration_s: 3
+ego_speed_mps: 16
+lead_range_m: 40
+fault:
+  drop_scan: true
+expect:
+  accept: false
+  codes:
+    - [gap, /lidar/scan]

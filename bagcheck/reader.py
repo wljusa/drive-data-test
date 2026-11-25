@@ -14,13 +14,20 @@ def header_stamp_ns(msg: object) -> int:
     return int(stamp.sec) * 1_000_000_000 + int(stamp.nanosec)
 
 
-def read_header_stamps(bag_path: Path) -> dict[str, list[int]]:
-    stamps: dict[str, list[int]] = {}
+def read_messages(bag_path: Path) -> dict[str, list[tuple[int, object]]]:
+    messages: dict[str, list[tuple[int, object]]] = {}
     with Reader(bag_path) as reader:
         for connection, _timestamp, raw in reader.messages():
             msg = TYPESTORE.deserialize_cdr(raw, connection.msgtype)
-            stamps.setdefault(connection.topic, []).append(header_stamp_ns(msg))
-    return stamps
+            messages.setdefault(connection.topic, []).append((header_stamp_ns(msg), msg))
+    return messages
+
+
+def read_header_stamps(bag_path: Path) -> dict[str, list[int]]:
+    return {
+        topic: [stamp for stamp, _msg in items]
+        for topic, items in read_messages(bag_path).items()
+    }
 
 
 def check_bag(bag_path: Path, expect: dict) -> Report:

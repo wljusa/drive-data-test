@@ -1,0 +1,6 @@
+name: 高速巡航
+duration_s: 3
+ego_speed_mps: 16
+lead_range_m: 40
+expect:
+  accept: true
